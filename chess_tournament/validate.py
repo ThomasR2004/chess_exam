@@ -97,7 +97,7 @@ def _validate_local(dir_name: str) -> dict:
         return res
 
 
-def validate(repo: str) -> dict:
+def validate_player(repo: str) -> dict:
     """
     Validates a chess player implementation.
     Works in both Google Colab and regular Python environments.
