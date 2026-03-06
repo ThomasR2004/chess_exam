@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 import logging
+import shutil
 
 from ..validate import validate_player
 
@@ -67,6 +68,8 @@ class SubmissionValidator:
                     dest_path = self.config.submission_dir / student_num
                     if not dest_path.exists():
                         self._clone_repo(repo_url, dest_path)
+                    else:
+                        self.logger.info(f"Repository already exists for {student_num}, skipping clone")
                 else:
                     self.logger.warning(f"❌ {student_num} REJECTED: {validation_result.get('error_message')}")
                     dest_path = ""
@@ -119,6 +122,14 @@ class SubmissionValidator:
             True if successful, False otherwise
         """
         try:
+            # If destination already exists, remove it first
+            if dest_dir.exists():
+                self.logger.warning(f"Destination {dest_dir} already exists, removing...")
+                shutil.rmtree(dest_dir)
+            
+            # Create parent directory if needed
+            dest_dir.parent.mkdir(parents=True, exist_ok=True)
+            
             result = subprocess.run(
                 ["git", "clone", repo_url, str(dest_dir)],
                 capture_output=True,
