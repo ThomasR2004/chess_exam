@@ -8,6 +8,7 @@ from typing import Optional
 import pandas as pd
 import logging
 import shutil
+import tempfile
 
 from ..validate import validate_player
 
@@ -57,50 +58,53 @@ class SubmissionValidator:
             
             self.logger.info(f"Validating {student_num}: {repo_url}")
             
-            try:
-                # Use validate_player from chess_exam
-                validation_result = validate_player(repo_url)
-                approved = validation_result.get("approved", False)
-                
-                if approved:
-                    self.logger.info(f"✅ {student_num} APPROVED")
-                    # Clone repo for tournament use
-                    dest_path = self.config.submission_dir / student_num
-                    if not dest_path.exists():
-                        self._clone_repo(repo_url, dest_path)
+            # Create a unique temp directory for this validation
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    # Use validate_player from chess_exam
+                    # It will clone into temp_dir
+                    validation_result = validate_player(repo_url, work_dir=temp_dir)
+                    approved = validation_result.get("approved", False)
+                    
+                    if approved:
+                        self.logger.info(f"✅ {student_num} APPROVED")
+                        # Clone repo for tournament use
+                        dest_path = self.config.submission_dir / student_num
+                        if not dest_path.exists():
+                            self._clone_repo(repo_url, dest_path)
+                        else:
+                            self.logger.info(f"Repository already exists for {student_num}, skipping clone")
                     else:
-                        self.logger.info(f"Repository already exists for {student_num}, skipping clone")
-                else:
-                    self.logger.warning(f"❌ {student_num} REJECTED: {validation_result.get('error_message')}")
-                    dest_path = ""
+                        self.logger.warning(f"❌ {student_num} REJECTED: {validation_result.get('error_message')}")
+                        dest_path = ""
+                    
+                    results.append({
+                        "student_number": student_num,
+                        "repo_url": repo_url,
+                        "repo_path": str(dest_path),
+                        "approved": approved,
+                        "error_msg": validation_result.get("error_message", ""),
+                        "import_ok": validation_result.get("import_ok", False),
+                        "class_found": validation_result.get("class_found", False),
+                        "instance_ok": validation_result.get("instance_ok", False),
+                        "valid_move_format": validation_result.get("valid_move_format", False),
+                        "duration": validation_result.get("duration", None),
+                    })
                 
-                results.append({
-                    "student_number": student_num,
-                    "repo_url": repo_url,
-                    "repo_path": str(dest_path),
-                    "approved": approved,
-                    "error_msg": validation_result.get("error_message", ""),
-                    "import_ok": validation_result.get("import_ok", False),
-                    "class_found": validation_result.get("class_found", False),
-                    "instance_ok": validation_result.get("instance_ok", False),
-                    "valid_move_format": validation_result.get("valid_move_format", False),
-                    "duration": validation_result.get("duration", None),
-                })
-            
-            except Exception as e:
-                self.logger.error(f"Validation exception for {student_num}: {e}")
-                results.append({
-                    "student_number": student_num,
-                    "repo_url": repo_url,
-                    "repo_path": "",
-                    "approved": False,
-                    "error_msg": str(e),
-                    "import_ok": False,
-                    "class_found": False,
-                    "instance_ok": False,
-                    "valid_move_format": False,
-                    "duration": None,
-                })
+                except Exception as e:
+                    self.logger.error(f"Validation exception for {student_num}: {e}")
+                    results.append({
+                        "student_number": student_num,
+                        "repo_url": repo_url,
+                        "repo_path": "",
+                        "approved": False,
+                        "error_msg": str(e),
+                        "import_ok": False,
+                        "class_found": False,
+                        "instance_ok": False,
+                        "valid_move_format": False,
+                        "duration": None,
+                    })
         
         result_df = pd.DataFrame(results)
         result_df.to_csv(self.config.validation_results_csv, index=False)
