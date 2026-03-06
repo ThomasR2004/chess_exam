@@ -1,0 +1,184 @@
+"""
+Tournament execution using Swiss and round-robin formats.
+"""
+
+import random
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+import logging
+
+from ..tournament import swiss_tournament, round_robin_tournament, instantiate_participant, destroy_instance
+
+
+class TournamentRunner:
+    """
+    Orchestrates tournament stages (qualifiers, semifinals, finals).
+    
+    Uses Swiss tournament for group stages and can use round-robin for finals.
+    """
+    
+    def __init__(self, config, logger: logging.Logger):
+        """
+        Args:
+            config: ChampionshipConfig instance
+            logger: Logger instance
+        """
+        self.config = config
+        self.logger = logger
+    
+    def create_plan(self,
+                   participants: List[Dict[str, Any]],
+                   group_size: int,
+                   out_plan_csv: Path) -> pd.DataFrame:
+        """
+        Create a tournament plan by assigning players to groups.
+        
+        Args:
+            participants: List of participant descriptors
+                         (from ChessChampionship._build_participants)
+            group_size: Target players per group
+            out_plan_csv: Path to save plan CSV
+        
+        Returns:
+            DataFrame with plan (group_id, participant_id, etc.)
+        """
+        rng = random.Random(42)
+        shuffled = participants.copy()
+        rng.shuffle(shuffled)
+        
+        rows = []
+        group_id = 1
+        idx = 0
+        
+        while idx < len(shuffled):
+            group_members = shuffled[idx : idx + group_size]
+            for desc in group_members:
+                rows.append({
+                    "group_id": group_id,
+                    "participant_id": desc["id"],
+                    "participant_name": desc["name"],
+                    "type": desc.get("type"),
+                    "repo_path": desc.get("repo_path", ""),
+                    "baseline_key": desc.get("baseline_key", "")
+                })
+            group_id += 1
+            idx += group_size
+        
+        plan_df = pd.DataFrame(rows)
+        plan_df.to_csv(out_plan_csv, index=False)
+        
+        num_groups = plan_df["group_id"].max()
+        self.logger.info(f"Created plan: {num_groups} groups, ~{group_size} players/group → {out_plan_csv}")
+        
+        return plan_df
+    
+    def run_swiss_stage(self,
+                       stage_name: str,
+                       plan_csv: Path,
+                       results_csv: Path,
+                       n_rounds: int = 3,
+                       games_per_pairing: int = 1,
+                       max_half_moves: int = 200,
+                       engine_break: float = 0.0) -> pd.DataFrame:
+        """
+        Run a Swiss-tournament stage.
+        
+        Args:
+            stage_name: Name for logging (e.g., "Qualifiers")
+            plan_csv: Path to tournament plan CSV
+            results_csv: Path to save results CSV
+            n_rounds: Number of Swiss rounds
+            games_per_pairing: Games per matched pair
+            max_half_moves: Max half-moves per game
+            engine_break: Sleep time between games (for engine rate limiting)
+        
+        Returns:
+            DataFrame with results (participant_name, points, fallbacks, etc.)
+        """
+        self.logger.info(f"\n╔════ {stage_name.upper()} (SWISS) ════╗")
+        
+        plan_df = pd.read_csv(plan_csv, dtype=str)
+        plan_df["group_id"] = plan_df["group_id"].astype(int)
+        
+        group_ids = sorted(plan_df["group_id"].unique())
+        all_results = []
+        
+        for group_id in group_ids:
+            group_df = plan_df[plan_df["group_id"] == group_id]
+            group_participants = []
+            
+            # Build participant descriptors for this group
+            for _, row in group_df.iterrows():
+                desc = {
+                    "type": row.get("type"),
+                    "id": row.get("participant_id"),
+                    "name": row.get("participant_name"),
+                    "repo_path": row.get("repo_path", ""),
+                    "baseline_key": row.get("baseline_key", "")
+                }
+                group_participants.append(desc)
+            
+            self.logger.info(f"\n{stage_name} GROUP {group_id}: {len(group_participants)} players, {n_rounds} rounds")
+            
+            try:
+                # Run swiss tournament for this group
+                result = swiss_tournament(
+                    participant_descs=group_participants,
+                    instantiate_fn=instantiate_participant,
+                    destroy_fn=destroy_instance,
+                    n_rounds=n_rounds,
+                    games_per_pairing=games_per_pairing,
+                    max_half_moves=max_half_moves,
+                    engine_break=engine_break
+                )
+                
+                # Convert results to standard format
+                for rank, name in enumerate(result["leaderboard"], start=1):
+                    # Find participant ID
+                    part_id = next((p["id"] for p in group_participants if p["name"] == name), name)
+                    
+                    all_results.append({
+                        "group_id": group_id,
+                        "rank": rank,
+                        "participant_id": part_id,
+                        "participant_name": name,
+                        "points": result["scores"][name],
+                        "fallbacks": result["fallbacks"][name],
+                        "buchholz": result.get("buchholz", {}).get(name, 0.0),
+                    })
+            
+            except Exception as e:
+                self.logger.error(f"Error in {stage_name} group {group_id}: {e}")
+                raise
+        
+        results_df = pd.DataFrame(all_results)
+        results_df.to_csv(results_csv, index=False)
+        self.logger.info(f"\n✅ {stage_name} complete: {len(all_results)} results")
+        
+        return results_df
+    
+    def get_advancing(self, results_df: pd.DataFrame, top_k: int) -> List[Dict[str, Any]]:
+        """
+        Get top_k players by points from results.
+        
+        Args:
+            results_df: Results DataFrame from run_swiss_stage
+            top_k: Number of top players to return
+        
+        Returns:
+            List of participant descriptors for advancing players
+        """
+        sorted_results = results_df.nlargest(top_k, "points")
+        advancing = []
+        
+        for _, row in sorted_results.iterrows():
+            advancing.append({
+                "type": "student",
+                "id": row.get("participant_id", row["participant_name"]),
+                "name": row["participant_name"],
+                "repo_path": row.get("repo_path", ""),
+                "baseline_key": row.get("baseline_key", "")
+            })
+        
+        return advancing
