@@ -154,14 +154,14 @@ class SubmissionValidator:
                 timeout=self.config.max_clone_timeout
             )
             if result.returncode == 0:
-                self.logger.info(f"✅ Cloned: {repo_url}")
+                #self.logger.info(f"✅ Cloned: {repo_url}")
                 return True
             else:
-                self.logger.error(f"❌ Clone failed: {result.stderr.strip()}")
+                #self.logger.error(f"❌ Clone failed: {result.stderr.strip()}")
                 return False
         except subprocess.TimeoutExpired:
-            self.logger.error(f"❌ Clone timeout: {repo_url}")
+            #self.logger.error(f"❌ Clone timeout: {repo_url}")
             return False
         except Exception as e:
-            self.logger.error(f"❌ Error cloning {repo_url}: {e}")
+            #self.logger.error(f"❌ Error cloning {repo_url}: {e}")
             return False
