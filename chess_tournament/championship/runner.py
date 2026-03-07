@@ -142,6 +142,18 @@ class TournamentRunner:
                     engine_break=engine_break
                 )
                 
+                # Print leaderboard for this group (suppress it in swiss_tournament)
+                self.logger.info("\n🏆 GROUP LEADERBOARD 🏆")
+                for rank, name in enumerate(result["leaderboard"], start=1):
+                    points = result["scores"][name]
+                    buchholz = result["buchholz"][name]
+                    byes = result["byes"][name]
+                    fallbacks = result["fallbacks"][name]
+                    self.logger.info(
+                        f"{rank:>2}. {name:<20}  {points:>5.1f} pts "
+                        f"| buchholz {buchholz:>5.1f} | byes {byes} | fallbacks {fallbacks}"
+                    )
+                
                 # Convert results to standard format
                 for rank, name in enumerate(result["leaderboard"], start=1):
                     # Find participant descriptor to get repo_path and baseline_key
