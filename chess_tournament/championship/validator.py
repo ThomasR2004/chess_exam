@@ -3,11 +3,21 @@ Submission validation for chess tournament.
 """
 
 import os
+import sys
 import tempfile
 import pandas as pd
 from pathlib import Path
 import logging
-from chess_exam.validate import validate_player
+
+# Import validate_player from chess_exam root
+try:
+    from validate import validate_player
+except ImportError:
+    # Fallback: add chess_exam to path
+    chess_exam_path = Path(__file__).parent.parent.parent
+    if str(chess_exam_path) not in sys.path:
+        sys.path.insert(0, str(chess_exam_path))
+    from validate import validate_player
 
 
 class SubmissionValidator:
