@@ -90,7 +90,7 @@ class ChessChampionship:
         
         # [1] Validate submissions (or skip if already done)
         if skip_validation:
-            self.logger.info("\n[1/6] SKIPPING VALIDATION (pre-validated)")
+            # Silently skip validation
             validation_df = submissions_df
         else:
             self.logger.info("\n[1/6] VALIDATING SUBMISSIONS")
