@@ -83,8 +83,8 @@ class ChessChampionship:
         """
         
         self.logger.info("╔════════════════════════════════════════╗")
-        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK          ║")
-        self.logger.info("║   Qualifiers → Semifinals → Finals      ║")
+        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK         ║")
+        self.logger.info("║   Qualifiers → Semifinals → Finals     ║")
         self.logger.info("╚════════════════════════════════════════╝")
         self.logger.info(f"Work directory: {self.config.work_dir}")
         
@@ -197,14 +197,14 @@ class ChessChampionship:
                 "repo_path": row["repo_path"]
             })
         
-        # Add baseline players - IMPORTANT: include the factory!
+        # Add baseline players
         for baseline_key, info in self.baseline_factories.items():
             participants.append({
                 "type": "baseline",
                 "id": f"baseline-{baseline_key}",
                 "name": info["name"],
                 "baseline_key": baseline_key,
-                "factory": info["factory"]  # <-- THIS IS THE FIX!
+                "factory": info["factory"]  
             })
         
         return participants
