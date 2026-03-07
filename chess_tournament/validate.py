@@ -159,7 +159,7 @@ def validate_player(repo: str) -> dict:
         if res['import_ok'] and res['class_found'] and res['instance_ok'] and res['valid_move_format']:
             res['approved'] = True
             #print("✅ Player approved!")
-        else:
+        #else:
             #print(f"❌ Player rejected: {res['error_message']}")
         
         return res
