@@ -86,8 +86,8 @@ class ChessChampionship:
         """
         
         self.logger.info("╔════════════════════════════════════════╗")
-        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK          ║")
-        self.logger.info("║   Qualifiers → Semifinals → Finals      ║")
+        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK         ║")
+        self.logger.info("║   Qualifiers → Semifinals → Finals     ║")
         self.logger.info("╚════════════════════════════════════════╝")
         self.logger.info(f"Work directory: {self.config.work_dir}")
         
