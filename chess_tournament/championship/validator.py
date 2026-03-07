@@ -61,9 +61,8 @@ class SubmissionValidator:
             # Create a unique temp directory for this validation
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    # Use validate_player from chess_exam
-                    # It will clone into temp_dir
-                    validation_result = validate_player(repo_url, work_dir=temp_dir)
+                    # Use validate_player from chess_exam (no work_dir parameter)
+                    validation_result = validate_player(repo_url)
                     approved = validation_result.get("approved", False)
                     
                     if approved:
