@@ -1,27 +1,21 @@
 """
-Student submission validation using validate_player from chess_exam.
+Submission validation for chess tournament.
 """
 
-import subprocess
-from pathlib import Path
-from typing import Optional
-import pandas as pd
-import logging
-import shutil
-import tempfile
 import os
-
-from ..validate import validate_player
+import tempfile
+import pandas as pd
+from pathlib import Path
+import logging
+from chess_exam.validate import validate_player
 
 
 class SubmissionValidator:
     """
-    Validates student submissions using the validate_player function.
-    
-    Handles cloning, validation, and filtering of approved submissions.
+    Validates student submissions and clones repositories for tournament use.
     """
     
-    def __init__(self, config, logger: logging.Logger):
+    def __init__(self, config, logger: logging.Logger = None):
         """
         Args:
             config: ChampionshipConfig instance
@@ -76,7 +70,7 @@ class SubmissionValidator:
                     if approved:
                         self.logger.info(f"✅ {student_num} APPROVED")
                         # Clone repo for tournament use
-                        dest_path = self.config.submission_dir / str(student_num)
+                        dest_path = self.config.submission_dir / student_num
                         if not dest_path.exists():
                             self._clone_repo(repo_url, dest_path)
                         else:
@@ -127,41 +121,27 @@ class SubmissionValidator:
         
         return result_df
     
-    def _clone_repo(self, repo_url: str, dest_dir: Path) -> bool:
+    def _clone_repo(self, repo_url: str, dest_path: Path):
         """
-        Clone a repository.
+        Clone a Git repository to a local path.
         
         Args:
             repo_url: Git repository URL
-            dest_dir: Destination directory
-        
-        Returns:
-            True if successful, False otherwise
+            dest_path: Destination path for cloning
         """
+        import subprocess
+        
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        
         try:
-            # If destination already exists, remove it first
-            if dest_dir.exists():
-                self.logger.warning(f"Destination {dest_dir} already exists, removing...")
-                shutil.rmtree(dest_dir)
-            
-            # Create parent directory if needed
-            dest_dir.parent.mkdir(parents=True, exist_ok=True)
-            
-            result = subprocess.run(
-                ["git", "clone", repo_url, str(dest_dir)],
+            subprocess.run(
+                ["git", "clone", repo_url, str(dest_path)],
+                timeout=self.config.max_clone_timeout,
                 capture_output=True,
-                text=True,
-                timeout=self.config.max_clone_timeout
+                check=True
             )
-            if result.returncode == 0:
-                #self.logger.info(f"✅ Cloned: {repo_url}")
-                return True
-            else:
-                #self.logger.error(f"❌ Clone failed: {result.stderr.strip()}")
-                return False
+            self.logger.info(f"✓ Cloned {repo_url} to {dest_path}")
         except subprocess.TimeoutExpired:
-            #self.logger.error(f"❌ Clone timeout: {repo_url}")
-            return False
-        except Exception as e:
-            #self.logger.error(f"❌ Error cloning {repo_url}: {e}")
-            return False
+            raise TimeoutError(f"Git clone timed out for {repo_url}")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Git clone failed for {repo_url}: {e.stderr.decode()}")
