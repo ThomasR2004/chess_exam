@@ -47,7 +47,12 @@ class SubmissionValidator:
         results = []
         
         for idx, row in df.iterrows():
-            student_num = str(row.get("student_number", "")).strip()
+            # Convert student_number to int first (to remove .0), then to string
+            try:
+                student_num = str(int(row.get("student_number", "")))
+            except (ValueError, TypeError):
+                student_num = str(row.get("student_number", "")).strip()
+            
             repo_url = str(row.get("repo_url", "")).strip()
             
             if not repo_url or not student_num:
