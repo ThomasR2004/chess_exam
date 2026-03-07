@@ -9,6 +9,7 @@ import pandas as pd
 import logging
 import shutil
 import tempfile
+import os
 
 from ..validate import validate_player
 
@@ -61,14 +62,21 @@ class SubmissionValidator:
             # Create a unique temp directory for this validation
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    # Use validate_player from chess_exam (no work_dir parameter)
+                    # Change to temp directory so clone happens there
+                    original_cwd = os.getcwd()
+                    os.chdir(temp_dir)
+                    
+                    # Use validate_player from chess_exam
                     validation_result = validate_player(repo_url)
                     approved = validation_result.get("approved", False)
+                    
+                    # Change back to original directory
+                    os.chdir(original_cwd)
                     
                     if approved:
                         self.logger.info(f"✅ {student_num} APPROVED")
                         # Clone repo for tournament use
-                        dest_path = self.config.submission_dir / student_num
+                        dest_path = self.config.submission_dir / str(student_num)
                         if not dest_path.exists():
                             self._clone_repo(repo_url, dest_path)
                         else:
@@ -92,6 +100,12 @@ class SubmissionValidator:
                 
                 except Exception as e:
                     self.logger.error(f"Validation exception for {student_num}: {e}")
+                    # Make sure we change back to original directory
+                    try:
+                        os.chdir(original_cwd)
+                    except:
+                        pass
+                    
                     results.append({
                         "student_number": student_num,
                         "repo_url": repo_url,
