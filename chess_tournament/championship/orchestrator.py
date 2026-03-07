@@ -95,13 +95,13 @@ class ChessChampionship:
         with open(self.config.participants_snapshot, "w") as f:
             json.dump(participants, f, indent=2, default=str)
         
-        self.logger.info(f"Total participants: {len(participants)} "
-                        f"({sum(1 for p in participants if p['type'] == 'student')} students, "
-                        f"{sum(1 for p in participants if p['type'] == 'baseline')} baselines)")
+        num_students = sum(1 for p in participants if p['type'] == 'student')
+        num_baselines = sum(1 for p in participants if p['type'] == 'baseline')
+        self.logger.info(f"Total participants: {len(participants)} ({num_students} students, {num_baselines} baselines)")
         
         # [3] Qualifiers
         self.logger.info("\n[3/6] QUALIFIERS (Swiss Tournament)")
-        runner = TournamentRunner(self.config, self.logger)
+        runner = TournamentRunner(self.config, self.logger, self.baseline_factories)
         runner.create_plan(participants, qualifiers_group_size, self.config.qualifiers_plan_csv)
         
         qual_results = runner.run_swiss_stage(
@@ -158,7 +158,7 @@ class ChessChampionship:
         self.logger.info(f"\n{'='*80}")
         self.logger.info("FINAL LEADERBOARD".center(80))
         self.logger.info(f"{'='*80}\n")
-        print(final_results.to_string(index=False))
+        self.logger.info(final_results.to_string(index=False))
         self.logger.info(f"\n{'='*80}\n")
         
         return {
