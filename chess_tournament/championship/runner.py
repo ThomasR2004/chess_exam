@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 import logging
 
-from ..tournament import swiss_tournament, round_robin_tournament, instantiate_participant, destroy_instance
+from ..tournament import swiss_tournament, instantiate_participant, destroy_instance
 
 
 class TournamentRunner:
@@ -18,14 +18,16 @@ class TournamentRunner:
     Uses Swiss tournament for group stages and can use round-robin for finals.
     """
     
-    def __init__(self, config, logger: logging.Logger):
+    def __init__(self, config, logger: logging.Logger, baseline_factories: Dict[str, Dict[str, Any]] = None):
         """
         Args:
             config: ChampionshipConfig instance
             logger: Logger instance
+            baseline_factories: Dict of baseline factories (needed for instantiation)
         """
         self.config = config
         self.logger = logger
+        self.baseline_factories = baseline_factories or {}
     
     def create_plan(self,
                    participants: List[Dict[str, Any]],
@@ -110,13 +112,20 @@ class TournamentRunner:
             
             # Build participant descriptors for this group
             for _, row in group_df.iterrows():
+                baseline_key = row.get("baseline_key", "")
+                
                 desc = {
                     "type": row.get("type"),
                     "id": row.get("participant_id"),
                     "name": row.get("participant_name"),
                     "repo_path": row.get("repo_path", ""),
-                    "baseline_key": row.get("baseline_key", "")
+                    "baseline_key": baseline_key
                 }
+                
+                # Re-inject factory for baselines
+                if row.get("type") == "baseline" and baseline_key in self.baseline_factories:
+                    desc["factory"] = self.baseline_factories[baseline_key]["factory"]
+                
                 group_participants.append(desc)
             
             self.logger.info(f"\n{stage_name} GROUP {group_id}: {len(group_participants)} players, {n_rounds} rounds")
