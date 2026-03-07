@@ -188,17 +188,19 @@ class TournamentRunner:
         
         for _, row in sorted_results.iterrows():
             participant_id = row.get("participant_id", row["participant_name"])
-            baseline_key = row.get("baseline_key", "")
+            participant_name = row["participant_name"]
+            baseline_key = str(row.get("baseline_key", "")).strip()
+            repo_path = str(row.get("repo_path", "")).strip()
             
-            # Determine type: if baseline_key exists and is not empty, it's a baseline
-            is_baseline = baseline_key != "" and baseline_key is not None and str(baseline_key).strip() != ""
+            # Determine type: baselines have participant_id starting with "baseline-"
+            is_baseline = str(participant_id).startswith("baseline-")
             
             desc = {
                 "type": "baseline" if is_baseline else "student",
                 "id": participant_id,
-                "name": row["participant_name"],
-                "repo_path": str(row.get("repo_path", "")),
-                "baseline_key": baseline_key
+                "name": participant_name,
+                "repo_path": repo_path if repo_path else "",
+                "baseline_key": baseline_key if baseline_key else ""
             }
             
             # Re-inject factory for baselines
