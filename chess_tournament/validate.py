@@ -158,9 +158,9 @@ def validate_player(repo: str) -> dict:
         res = _validate_local(cloned_path)
         if res['import_ok'] and res['class_found'] and res['instance_ok'] and res['valid_move_format']:
             res['approved'] = True
-            print("✅ Player approved!")
-        else:
-            print(f"❌ Player rejected: {res['error_message']}")
+            #print("✅ Player approved!")
+        #else:
+            #print(f"❌ Player rejected: {res['error_message']}")
         
         return res
     

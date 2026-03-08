@@ -190,6 +190,7 @@ def swiss_tournament(
     games_per_pairing: int = 2,
     max_half_moves: int = 150,
     engine_break: float = 0.0,
+    suppress_leaderboard: bool = False,
 ):
     """
     Swiss tournament using PER-MATCH instantiation.
@@ -203,6 +204,7 @@ def swiss_tournament(
     participant_descs : lightweight descriptors (students + baselines)
     instantiate_fn    : function(desc) -> Player instance
     destroy_fn        : function(instance)
+    suppress_leaderboard : if True, don't print the final leaderboard
     """
 
     names = [p["name"] for p in participant_descs]
@@ -313,13 +315,14 @@ def swiss_tournament(
         key=lambda n: (-scores[n], -buchholz[n], fallbacks[n], n)
     )
 
-    print("\n🏆 FINAL LEADERBOARD 🏆")
-    for rank, name in enumerate(leaderboard, start=1):
-        print(
-            f"{rank:>2}. {name:<20}  {scores[name]:>5.1f} pts"
-            f" | buchholz {buchholz[name]:>5.1f}"
-            f" | byes {byes[name]} | fallbacks {fallbacks[name]}"
-        )
+    if not suppress_leaderboard:
+        print("\n🏆 FINAL LEADERBOARD 🏆")
+        for rank, name in enumerate(leaderboard, start=1):
+            print(
+                f"{rank:>2}. {name:<20}  {scores[name]:>5.1f} pts"
+                f" | buchholz {buchholz[name]:>5.1f}"
+                f" | byes {byes[name]} | fallbacks {fallbacks[name]}"
+            )
 
     return {
         "scores": scores,

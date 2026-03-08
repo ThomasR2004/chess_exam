@@ -80,17 +80,20 @@ class ChessChampionship:
                 - leaderboard_md: Path to Markdown
                 - work_dir: Output directory path
                 - validation_results: Validation DataFrame
+                - qualifiers_results: Qualifiers results DataFrame
+                - semifinals_results: Semifinals results DataFrame
+                - finals_results: Finals results DataFrame
         """
         
         self.logger.info("╔════════════════════════════════════════╗")
-        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK          ║")
-        self.logger.info("║   Qualifiers → Semifinals → Finals      ║")
+        self.logger.info("║   CHESS CHAMPIONSHIP FRAMEWORK         ║")
+        self.logger.info("║   Qualifiers → Semifinals → Finals     ║")
         self.logger.info("╚════════════════════════════════════════╝")
         self.logger.info(f"Work directory: {self.config.work_dir}")
         
         # [1] Validate submissions (or skip if already done)
         if skip_validation:
-            self.logger.info("\n[1/6] SKIPPING VALIDATION (pre-validated)")
+            # Silently skip validation
             validation_df = submissions_df
         else:
             self.logger.info("\n[1/6] VALIDATING SUBMISSIONS")
@@ -159,19 +162,100 @@ class ChessChampionship:
         
         # [6] Generate leaderboard
         self.logger.info("\n[6/6] GENERATING LEADERBOARD")
-        LeaderboardGenerator.write_markdown(final_results, self.config.final_leaderboard_md)
-        final_results.to_csv(self.config.final_leaderboard_csv, index=False)
+        
+        # Combine results from all stages for comprehensive leaderboard
+        all_stage_results = []
+        
+        # Add qualifiers results
+        for _, row in qual_results.iterrows():
+            all_stage_results.append({
+                "participant_name": row["participant_name"],
+                "stage": "Qualifiers",
+                "points": row["points"],
+                "fallbacks": row["fallbacks"],
+                "buchholz": row.get("buchholz", 0.0)
+            })
+        
+        # Add semifinals results
+        for _, row in semi_results.iterrows():
+            all_stage_results.append({
+                "participant_name": row["participant_name"],
+                "stage": "Semifinals",
+                "points": row["points"],
+                "fallbacks": row["fallbacks"],
+                "buchholz": row.get("buchholz", 0.0)
+            })
+        
+        # Add finals results
+        for _, row in final_results.iterrows():
+            all_stage_results.append({
+                "participant_name": row["participant_name"],
+                "stage": "Finals",
+                "points": row["points"],
+                "fallbacks": row["fallbacks"],
+                "buchholz": row.get("buchholz", 0.0)
+            })
+        
+        # Create comprehensive leaderboard: accumulate points and buchholz across stages
+        comprehensive_df = pd.DataFrame(all_stage_results)
+        
+        # Group by participant and sum their points/fallbacks/buchholz
+        leaderboard_accumulated = comprehensive_df.groupby("participant_name").agg({
+            "points": "sum",
+            "fallbacks": "sum",
+            "buchholz": "sum"
+        }).reset_index()
+        
+        # Sort using Swiss tournament tie-breaking rules:
+        # 1) Total points (descending - higher is better)
+        # 2) Total Buchholz (descending - higher is better, sum of opponents' points)
+        # 3) Total fallbacks (ascending - lower is better)
+        # 4) Participant name (ascending - alphabetical for determinism)
+        leaderboard_accumulated = leaderboard_accumulated.sort_values(
+            by=["points", "buchholz", "fallbacks", "participant_name"],
+            ascending=[False, False, True, True]
+        ).reset_index(drop=True)
+        
+        # Add rank
+        leaderboard_accumulated.insert(0, "rank", range(1, len(leaderboard_accumulated) + 1))
+        
+        # Rename for clarity
+        leaderboard_accumulated = leaderboard_accumulated.rename(columns={
+            "participant_name": "player",
+            "points": "total_points",
+            "buchholz": "total_buchholz",
+            "fallbacks": "total_fallbacks"
+        })
+        
+        # Keep only desired columns
+        leaderboard_accumulated = leaderboard_accumulated[[
+            "rank", "player", "total_points", "total_buchholz", "total_fallbacks"
+        ]]
+        
+        LeaderboardGenerator.write_markdown(leaderboard_accumulated, self.config.final_leaderboard_md)
+        leaderboard_accumulated.to_csv(self.config.final_leaderboard_csv, index=False)
         
         self.logger.info(f"\n✅ CHAMPIONSHIP COMPLETE!")
         self.logger.info(f"Leaderboard (Markdown): {self.config.final_leaderboard_md}")
         self.logger.info(f"Leaderboard (CSV): {self.config.final_leaderboard_csv}")
         
+        # Log top 10 for quick reference
+        self.logger.info(f"\n🏆 TOP 10 FINAL LEADERBOARD")
+        for _, row in leaderboard_accumulated.head(10).iterrows():
+            self.logger.info(
+                f"{int(row['rank']):>2}. {row['player']:<20} {row['total_points']:>6.1f} pts "
+                f"| buchholz {row['total_buchholz']:>6.1f} | fallbacks {row['total_fallbacks']:>3.0f}"
+            )
+        
         return {
-            "leaderboard": final_results,
+            "leaderboard": leaderboard_accumulated,
             "leaderboard_csv": self.config.final_leaderboard_csv,
             "leaderboard_md": self.config.final_leaderboard_md,
             "work_dir": self.config.work_dir,
-            "validation_results": validation_df
+            "validation_results": validation_df,
+            "qualifiers_results": qual_results,
+            "semifinals_results": semi_results,
+            "finals_results": final_results
         }
     
     def _build_participants(self, validation_df: pd.DataFrame) -> List[Dict[str, Any]]:
