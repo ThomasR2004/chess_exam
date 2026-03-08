@@ -30,10 +30,12 @@ class TransformerPlayer(Player):
             device_map="auto",
             trust_remote_code=True
         )
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(base_path, "qwen-chess-tactics-final")
 
         self.model = PeftModel.from_pretrained(
             base_model,
-            "../qwen-chess-tactics-final"
+            model_path
         )
 
         self.model.eval()
