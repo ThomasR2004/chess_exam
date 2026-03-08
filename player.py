@@ -31,7 +31,6 @@ class TransformerPlayer(Player):
             trust_remote_code=True
         )
 
-        # Load your trained LoRA adapter
         self.model = PeftModel.from_pretrained(
             base_model,
             "../qwen-chess-tactics-final"
@@ -48,7 +47,7 @@ class TransformerPlayer(Player):
             chess.KING: 0
         }
         self.plan_active = True
-        self.plan_name = None # 'scholars_white' or 'e5_black'
+        self.plan_name = None 
 
     def get_opening_move(self, board: chess.Board) -> str:
         """Returns a hardcoded move if the plan is active and valid, else None."""
@@ -146,7 +145,7 @@ class TransformerPlayer(Player):
                 if move in board.legal_moves and attackers == 2:
                    return "h4f2"
 
-            # If we reach here, the specific plan steps are exhausted or blocked
+            
             self.plan_active = False
             return None
 
@@ -165,8 +164,8 @@ class TransformerPlayer(Player):
         mate_moves = []
         check_moves = []
         safe_captures = []
-        positional_moves = [] # Developing pieces, pushing pawns
-        danger_moves = []     # Moves that hang a piece
+        positional_moves = [] 
+        danger_moves = []     
 
         for move in board.legal_moves:
             u = move.uci()
@@ -180,7 +179,7 @@ class TransformerPlayer(Player):
 
             # Blunder detection: Does this move allow the opponent to mate us or take our Queen for free?
             is_blunder = False
-            if not board.is_checkmate(): # If we didn't just win...
+            if not board.is_checkmate():
                 for opp_move in board.legal_moves:
                     if board.is_capture(opp_move):
                         cap = board.piece_at(opp_move.to_square)
@@ -203,7 +202,7 @@ class TransformerPlayer(Player):
 
             board.pop()
 
-            # 3. Static Capture Analysis
+            # 3. Capture Analysis
             if board.is_capture(move):
                 captured_piece = board.piece_at(move.to_square) or (board.is_en_passant(move) and chess.Piece(chess.PAWN, not board.turn))
                 if captured_piece:
