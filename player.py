@@ -4,8 +4,6 @@ import chess
 import re
 from peft import PeftModel
 
-from chess_tournament import Player
-
 class TransformerPlayer(Player):
     def __init__(self, name: str, model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"):
         super().__init__(name)
@@ -47,80 +45,160 @@ class TransformerPlayer(Player):
             chess.QUEEN: 9,
             chess.KING: 0
         }
+        self.plan_active = True
+        self.plan_name = None # 'scholars_white' or 'e5_black'
+        
+    def get_opening_move(self, board: chess.Board) -> str:
+        """Returns a hardcoded move if the plan is active and valid, else None."""
+        if not self.plan_active:
+            return None
+
+        # Determine color and set plan on move 1
+        if board.fullmove_number == 1:
+            if board.turn == chess.WHITE:
+                self.plan_name = 'scholars_white'
+            else:
+                # If we are black and white played e4, we respond e5
+                last_move = board.peek().uci() if board.move_stack else ""
+                if last_move == "e2e4":
+                    self.plan_name = 'e5_black'
+                else:
+                    self.plan_active = False # Unknown opening, abort plan
+
+        # Scholars mate idea
+        if self.plan_name == 'scholars_white':
+            # Step 1: 1. e4
+            if board.fullmove_number == 1:
+                return "e2e4"
+
+            # Step 2: 2. Bc4 (Check if f1c4 is legal and d5/e6 haven't blocked path)
+            if board.fullmove_number == 2:
+                move = chess.Move.from_uci("f1c4")
+                if move in board.legal_moves:
+                    return "f1c4"
+
+            # Step 3: 3. Qh5 (Check if g6 or Nf6 has been played)
+            if board.fullmove_number == 3:
+                move = chess.Move.from_uci("d1h5")
+                # Abort if Black played g6 or Nf6 which attacks/blocks h5
+                if move in board.legal_moves and not board.is_attacked_by(chess.BLACK, chess.H5):
+                    return "d1h5"
+
+            # Step 4: 4. Qxf7#
+            if board.fullmove_number == 4:
+                move = chess.Move.from_uci("h5f7")
+                if move in board.legal_moves:
+                    return "h5f7"
+
+        # WIP
+        if self.plan_name == 'e5_black':
+            if board.fullmove_number == 1:
+                return "e7e5"
+
+        # If we reach here, the specific plan steps are exhausted or blocked
+        self.plan_active = False
+        return None
 
     def get_move(self, fen: str) -> str:
         board = chess.Board(fen)
 
-        legal_moves = []
-        good_captures = []
-        check_moves = []
+        opening_move = self.get_opening_move(board)
+        if opening_move:
+            print('Plan A')
+            self.last_move = opening_move
+            return opening_move
+
+        is_endgame = len(board.piece_map()) <= 12
+
+        # Categorized moves
         mate_moves = []
+        check_moves = []
+        safe_captures = []
+        positional_moves = [] # Developing pieces, pushing pawns
+        danger_moves = []     # Moves that hang a piece
 
         for move in board.legal_moves:
             u = move.uci()
 
-            # Prevent reversing previous move
-            if self.last_move:
-                if u[:2] == self.last_move[2:4] and u[2:4] == self.last_move[:2]:
-                    continue
-
-            legal_moves.append(u)
-
-            # ---- capture evaluation ----
-            if board.is_capture(move):
-
-                captured_piece = board.piece_at(move.to_square)
-
-                if captured_piece is None and board.is_en_passant(move):
-                    captured_value = self.piece_values[chess.PAWN]
-
-                elif captured_piece:
-                    captured_value = self.piece_values[captured_piece.piece_type]
-
-                else:
-                    captured_value = 0
-
-                moving_piece = board.piece_at(move.from_square)
-                moving_value = self.piece_values[moving_piece.piece_type]
-
-                if captured_value > moving_value:
-                    good_captures.append(u)
-
-            # ---- check / mate detection ----
+            # 1. Lookahead: What happens if we make this move?
             board.push(move)
 
+            # Immediate win detection
             if board.is_checkmate():
                 mate_moves.append(u)
-            elif board.is_check():
+
+            # Blunder detection: Does this move allow the opponent to mate us or take our Queen for free?
+            is_blunder = False
+            if not board.is_checkmate(): # If we didn't just win...
+                for opp_move in board.legal_moves:
+                    if board.is_capture(opp_move):
+                        cap = board.piece_at(opp_move.to_square)
+                        # If opponent can take our Queen/Rook for free next turn
+                        if cap and self.piece_values[cap.piece_type] >= 5:
+                            # Simple check: Is the piece undefended?
+                            if not board.is_attacked_by(board.turn, opp_move.to_square):
+                                is_blunder = True
+                    if board.is_checkmate():
+                        is_blunder = True
+
+            if is_blunder:
+                danger_moves.append(u)
+                board.pop()
+                continue
+
+            # 2. Check detection
+            if board.is_check():
                 check_moves.append(u)
 
             board.pop()
 
-        if not legal_moves:
-            legal_moves = [m.uci() for m in board.legal_moves]
+            # 3. Static Capture Analysis
+            if board.is_capture(move):
+                captured_piece = board.piece_at(move.to_square) or (board.is_en_passant(move) and chess.Piece(chess.PAWN, not board.turn))
+                if captured_piece:
+                    cap_val = self.piece_values[captured_piece.piece_type]
+                    move_val = self.piece_values[board.piece_at(move.from_square).piece_type]
 
-        capture_text = ""
-        if good_captures:
-            capture_text = f"\nGood capture moves: {', '.join(good_captures)}"
+                    # If we take something more valuable, or equal value
+                    if cap_val >= move_val:
+                        safe_captures.append(u)
+                    # If piece is undefended, any capture is good
+                    elif not board.is_attacked_by(not board.turn, move.to_square):
+                        safe_captures.append(u)
 
-        check_text = ""
-        if check_moves:
-            check_text = f"\nCheck moves: {', '.join(check_moves)}"
+            # 4. Endgame/Positional logic
+            if is_endgame:
+                # Reward pushing pawns closer to promotion
+                piece = board.piece_at(move.from_square)
+                if piece.piece_type == chess.PAWN:
+                    rank = chess.square_rank(move.to_square)
+                    if (board.turn == chess.WHITE and rank > 4) or (board.turn == chess.BLACK and rank < 3):
+                        positional_moves.append(u)
+                # Reward King movement toward the center
+                if piece.piece_type == chess.KING:
+                    center_squares = [chess.D4, chess.D5, chess.E4, chess.E5]
+                    if move.to_square in center_squares:
+                        positional_moves.append(u)
 
-        mate_text = ""
-        if mate_moves:
-            mate_text = f"\nCheckmate moves: {', '.join(mate_moves)}"
+        # Filter legal moves to remove blunders if possible
+        refined_legal = [m.uci() for m in board.legal_moves if m.uci() not in danger_moves]
+        if not refined_legal: # If every move is a "blunder", go back to all legal
+            refined_legal = [m.uci() for m in board.legal_moves]
 
-        prompt = (
-            f"Current Chess FEN: {fen}\n"
-            f"Legal moves: {', '.join(legal_moves)}"
-            f"{capture_text}"
-            f"{check_text}"
-            f"{mate_text}\n"
-            "Task: Pick the best chess move, ALWAYS pick a mate or check if available. Output ONLY the move in UCI format."
-        )
+        # Construct richer prompt
+        prompt_parts = [f"Current Chess FEN: {fen}"]
+        prompt_parts.append(f"Safe moves: {', '.join(refined_legal[:20])}") # Truncate to save tokens
 
-        messages = [{"role": "user", "content": prompt}]
+        if mate_moves: prompt_parts.append(f"CHECKMATE in 1: {', '.join(mate_moves)}")
+        if check_moves: prompt_parts.append(f"Check moves: {', '.join(check_moves)}")
+        if safe_captures: prompt_parts.append(f"Profitable captures: {', '.join(safe_captures)}")
+        if positional_moves: prompt_parts.append(f"Strategic/Endgame moves: {', '.join(positional_moves)}")
+
+        prompt_parts.append("Task: Pick the best move. Priority: Mate > Check > Capture > Positional. Output ONLY the UCI move.")
+
+        full_prompt = "\n".join(prompt_parts)
+
+        messages = [{"role": "user", "content": full_prompt}]
 
         text = self.tokenizer.apply_chat_template(
             messages,
@@ -160,11 +238,11 @@ class TransformerPlayer(Player):
                     self.last_move = move
                     return move
 
-                if move in good_captures:
+                if move in safe_captures:
                     self.last_move = move
                     return move
 
-                if move in legal_moves:
+                if move in refined_legal:
                     self.last_move = move
                     return move
         return None
