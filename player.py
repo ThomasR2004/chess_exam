@@ -264,7 +264,7 @@ class TransformerPlayer(Player):
                 **model_inputs,
                 max_new_tokens=10,
                 do_sample=True,
-                temperature=0.7,
+                temperature=0.4,
                 top_p=0.9,
                 num_return_sequences=5
             )
