@@ -13,7 +13,7 @@ class TransformerPlayer(Player):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.last_move = None
 
-        print(f"[{self.name}] Loading model {model_id} in 4-bit...")
+        print(f"[{self.name}] Loading model {model_id} in 4-bit")
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -34,7 +34,7 @@ class TransformerPlayer(Player):
         # Load your trained LoRA adapter
         self.model = PeftModel.from_pretrained(
             base_model,
-            "../qwen-chess-tactics-final"
+            "/content/qwen-chess-tactics-final"
         )
 
         self.model.eval()
@@ -49,9 +49,10 @@ class TransformerPlayer(Player):
         }
         self.plan_active = True
         self.plan_name = None # 'scholars_white' or 'e5_black'
-        
+
     def get_opening_move(self, board: chess.Board) -> str:
         """Returns a hardcoded move if the plan is active and valid, else None."""
+        self.planb = False
         if not self.plan_active:
             return None
 
@@ -60,12 +61,7 @@ class TransformerPlayer(Player):
             if board.turn == chess.WHITE:
                 self.plan_name = 'scholars_white'
             else:
-                # If we are black and white played e4, we respond e5
-                last_move = board.peek().uci() if board.move_stack else ""
-                if last_move == "e2e4":
-                    self.plan_name = 'e5_black'
-                else:
-                    self.plan_active = False # Unknown opening, abort plan
+                self.plan_name = 'e5_black'
 
         # Scholars mate idea
         if self.plan_name == 'scholars_white':
@@ -85,21 +81,74 @@ class TransformerPlayer(Player):
                 # Abort if Black played g6 or Nf6 which attacks/blocks h5
                 if move in board.legal_moves and not board.is_attacked_by(chess.BLACK, chess.H5):
                     return "d1h5"
+                move = chess.Move.from_uci("d1f3")
+                if move in board.legal_moves and not board.is_attacked_by(chess.BLACK, chess.F3):
+                    self.planb = True
+                    return "d1f3"
+
 
             # Step 4: 4. Qxf7#
-            if board.fullmove_number == 4:
+            if board.fullmove_number == 4 and not self.planb:
                 move = chess.Move.from_uci("h5f7")
                 if move in board.legal_moves:
                     return "h5f7"
+                move = chess.Move.from_uci("h5f3")
+                if move in board.legal_moves:
+                    self.planb = True
+                    return "h5f3"
+                    
 
-        # WIP
+            elif board.fullmove_number == 4 and self.planb:
+                move = chess.Move.from_uci("f3f7")
+                attackers = board.attackers(chess.WHITE, chess.F7)
+                if move in board.legal_moves and attackers == 2:
+                    return "f3f7"
+            # step 5 if we can via alt route
+            if board.fullmove_number == 5 and self.planb:
+                move = chess.Move.from_uci("f3f7")
+                attackers = board.attackers(chess.WHITE, chess.F7)
+                if move in board.legal_moves and attackers == 2:
+                    return "f3f7"
+            
+
+        # Scholars mate idea as black
         if self.plan_name == 'e5_black':
+
+            # Step 1:  e5
             if board.fullmove_number == 1:
+                move = chess.Move.from_uci("e7e5")
                 return "e7e5"
 
-        # If we reach here, the specific plan steps are exhausted or blocked
-        self.plan_active = False
-        return None
+            # Step 2:  Bc5
+            if board.fullmove_number == 2:
+                move = chess.Move.from_uci("f8c5")
+                if move in board.legal_moves:
+                    return "f8c5"
+
+            # Step 3: Qh4
+            if board.fullmove_number == 3:
+                move = chess.Move.from_uci("d8h4")
+
+                # Abort if white already defends f2 or attacks h4 
+                white_moves = [m.uci() for m in board.move_stack]
+
+                if (
+                    move in board.legal_moves
+                    and not board.is_attacked_by(chess.WHITE, chess.H4)
+                    and "d1e2" not in white_moves
+                ):
+                    return "d8h4"
+
+            # Step 4: Qxf2#
+            if board.fullmove_number == 4:
+                move = chess.Move.from_uci("h4f2")
+                attackers = board.attackers(chess.BLACK, chess.F2)
+                if move in board.legal_moves and attackers == 2:
+                   return "h4f2"
+
+            # If we reach here, the specific plan steps are exhausted or blocked
+            self.plan_active = False
+            return None
 
     def get_move(self, fen: str) -> str:
         board = chess.Board(fen)
@@ -174,7 +223,7 @@ class TransformerPlayer(Player):
                 piece = board.piece_at(move.from_square)
                 if piece.piece_type == chess.PAWN:
                     rank = chess.square_rank(move.to_square)
-                    if (board.turn == chess.WHITE and rank > 4) or (board.turn == chess.BLACK and rank < 3):
+                    if (board.turn == chess.WHITE and rank > 1) or (board.turn == chess.BLACK and rank < 8):
                         positional_moves.append(u)
                 # Reward King movement toward the center
                 if piece.piece_type == chess.KING:
@@ -187,9 +236,9 @@ class TransformerPlayer(Player):
         if not refined_legal: # If every move is a "blunder", go back to all legal
             refined_legal = [m.uci() for m in board.legal_moves]
 
-        # Construct richer prompt
+        # Construct prompt
         prompt_parts = [f"Current Chess FEN: {fen}"]
-        prompt_parts.append(f"Safe moves: {', '.join(refined_legal[:20])}") # Truncate to save tokens
+        prompt_parts.append(f"Safe moves: {', '.join(refined_legal)}") 
 
         if mate_moves: prompt_parts.append(f"CHECKMATE in 1: {', '.join(mate_moves)}")
         if check_moves: prompt_parts.append(f"Check moves: {', '.join(check_moves)}")
