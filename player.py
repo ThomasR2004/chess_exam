@@ -13,7 +13,6 @@ class TransformerPlayer(Player):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.last_move = None
 
-        print(f"[{self.name}] Loading model {model_id} in 4-bit")
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -156,7 +155,6 @@ class TransformerPlayer(Player):
 
         opening_move = self.get_opening_move(board)
         if opening_move:
-            print('Plan A')
             self.last_move = opening_move
             return opening_move
 
