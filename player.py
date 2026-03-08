@@ -33,7 +33,7 @@ class TransformerPlayer(Player):
 
         self.model = PeftModel.from_pretrained(
             base_model,
-            "../qwen-chess-tactics-final"
+            "./qwen-chess-tactics-final"
         )
 
         self.model.eval()
