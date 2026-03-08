@@ -3,7 +3,7 @@ import torch
 import chess
 import re
 from peft import PeftModel
-
+import os
 from chess_tournament import Player
 
 class TransformerPlayer(Player):
