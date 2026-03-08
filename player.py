@@ -34,7 +34,7 @@ class TransformerPlayer(Player):
         # Load your trained LoRA adapter
         self.model = PeftModel.from_pretrained(
             base_model,
-            "/content/qwen-chess-tactics-final"
+            "../qwen-chess-tactics-final"
         )
 
         self.model.eval()
