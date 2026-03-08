@@ -4,6 +4,8 @@ import chess
 import re
 from peft import PeftModel
 
+from chess_tournament import Player
+
 class TransformerPlayer(Player):
     def __init__(self, name: str, model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"):
         super().__init__(name)
